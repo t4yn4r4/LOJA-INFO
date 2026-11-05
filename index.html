@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Estoque - Loja de Informática</title>
+    <!-- Biblioteca oficial do Supabase via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f6f9; padding: 20px; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { margin-bottom: 20px; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        h2 { margin-bottom: 15px; font-size: 1.2rem; color: #555; }
+        
+        /* Formulário */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; color: #666; }
+        .form-group input, .form-group select { padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
+        .form-group input:focus { border-color: #3498db; outline: none; }
+        
+        /* Botões */
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; transition: background 0.2s; font-size: 0.9rem; }
+        .btn-primary { background: #3498db; color: #fff; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: #2ecc71; color: #fff; }
+        .btn-success:hover { background: #27ae60; }
+        .btn-danger { background: #e74c3c; color: #fff; padding: 5px 10px; font-size: 0.8rem; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-warning { background: #f39c12; color: #fff; padding: 5px 10px; font-size: 0.8rem; }
+        .btn-warning:hover { background: #d68910; }
+        .btn-secondary { background: #95a5a6; color: #fff; }
+        .btn-secondary:hover { background: #7f8c8d; }
+        .action-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
+
+        /* Filtros e Busca */
+        .filters { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center; background: #f9f9f9; padding: 10px; border-radius: 4px; }
+        .filters input, .filters select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .filters input[type="text"] { flex: 1; min-width: 200px; }
+
+        /* Tabela */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; color: #555; }
+        tr:hover { background: #f1f8ff; }
+        .low-stock { background-color: #fff3cd !important; color: #856404; font-weight: bold; }
+        .low-stock-badge { background: #e74c3c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; margin-left: 5px; }
+        .hidden { display: none; }
+        .message { padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none; }
+        .message.error { background: #f8d7da; color: #721c24; display: block; }
+        .message.success { background: #d4edda; color: #155724; display: block; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🖥️ Controle de Estoque</h1>
+
+    <!-- Mensagens de feedback -->
+    <div id="message" class="message"></div>
+
+    <!-- Formulário de Cadastro / Edição -->
+    <h2 id="formTitle">Cadastrar Novo Produto</h2>
+    <form id="productForm">
+        <input type="hidden" id="productId" value="">
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="nome">Nome *</label>
+                <input type="text" id="nome" required placeholder="Ex: Teclado Mecânico">
+            </div>
+            <div class="form-group">
+                <label for="categoria">Categoria</label>
+                <input type="text" id="categoria" placeholder="Ex: Periféricos">
+            </div>
+            <div class="form-group">
+                <label for="marca">Marca</label>
+                <input type="text" id="marca" placeholder="Ex: Logitech">
+            </div>
+            <div class="form-group">
+                <label for="modelo">Modelo</label>
+                <input type="text" id="modelo" placeholder="Ex: G413">
+            </div>
+            <div class="form-group">
+                <label for="codigo">Código do Produto</label>
+                <input type="text" id="codigo" placeholder="Ex: TEC-001">
+            </div>
+            <div class="form-group">
+                <label for="quantidade">Qtd. em Estoque *</label>
+                <input type="number" id="quantidade" required min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+                <label for="precoCusto">Preço de Custo (R$)</label>
+                <input type="number" id="precoCusto" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="form-group">
+                <label for="precoVenda">Preço de Venda (R$)</label>
+                <input type="number" id="precoVenda" step="0.01" min="0" placeholder="0.00">
+            </div>
+        </div>
+        <div class="action-buttons">
+            <button type="submit" class="btn btn-success" id="btnSubmit">Salvar Produto</button>
+            <button type="button" class="btn btn-secondary" id="btnCancelEdit" onclick="resetForm()">Cancelar Edição</button>
+        </div>
+    </form>
+
+    <hr style="margin: 30px 0; border: 0; border-top: 1px solid #eee;">
+
+    <!-- Busca e Filtros -->
+    <h2>Produtos Cadastrados</h2>
+    <div class="filters">
+        <input type="text" id="searchInput" placeholder="🔍 Buscar por nome, marca ou código..." oninput="loadProducts()">
+        <select id="filterCategoria" onchange="loadProducts()">
+            <option value="">Todas as Categorias</option>
+        </select>
+        <button class="btn btn-primary" onclick="loadProducts()">Atualizar</button>
+    </div>
+    <p style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">
+        ⚠️ Produtos com estoque baixo (≤ 5 unidades) são destacados em <span style="background:#fff3cd; padding:2px 5px; border-radius:3px;">amarelo</span>.
+    </p>
+
+    <!-- Tabela de Produtos -->
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Nome</th>
+                    <th>Categoria</th>
+                    <th>Marca/Modelo</th>
+                    <th>Qtd</th>
+                    <th>Custo (R$)</th>
+                    <th>Venda (R$)</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="productTableBody">
+                <tr><td colspan="8" style="text-align:center;">Carregando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // =================================================================
+    // ⚠️ CONFIGURAÇÃO DO SUPABASE - SUBSTITUA AQUI
+    // =================================================================
+    // 1. Vá em Project Settings > API no seu painel do Supabase
+    // 2. Copie a "Project URL" e cole em SUPABASE_URL
+    // 3. Copie a chave "anon public" e cole em SUPABASE_ANON_KEY
+    // 4. NUNCA use a chave "service_role" aqui (ela ignora todas as regras de segurança)
+    // =================================================================
+    const SUPABASE_URL = 'https://kbvsnathgzceovoptnnp.supabase.co';      // Ex: https://xyzabc.supabase.co
+    const SUPABASE_ANON_KEY = 'sb_publishable_ZoabKzFVLvBW3wNA89QT6w_SZHJF4aO';       // Ex: eyJhbGciOiJIUzI1NiIs...
+
+    // Inicializa o cliente Supabase
+    // Nota: usamos "db" para evitar conflito com a variável global "supabase" do CDN
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Elementos do DOM
+    const form = document.getElementById('productForm');
+    const productIdInput = document.getElementById('productId');
+    const formTitle = document.getElementById('formTitle');
+    const btnSubmit = document.getElementById('btnSubmit');
+    const btnCancelEdit = document.getElementById('btnCancelEdit');
+    const tableBody = document.getElementById('productTableBody');
+    const messageDiv = document.getElementById('message');
+    const searchInput = document.getElementById('searchInput');
+    const filterCategoria = document.getElementById('filterCategoria');
+
+    let allProducts = []; // Cache local para filtros rápidos
+
+    // --- Funções Auxiliares ---
+    function showMessage(msg, type = 'error') {
+        messageDiv.textContent = msg;
+        messageDiv.className = `message ${type}`;
+        setTimeout(() => { messageDiv.style.display = 'none'; }, 5000);
+    }
+
+    function formatCurrency(value) {
+        if (value === null || value === undefined) return '0,00';
+        return parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function resetForm() {
+        form.reset();
+        productIdInput.value = '';
+        formTitle.textContent = 'Cadastrar Novo Produto';
+        btnSubmit.textContent = 'Salvar Produto';
+        btnSubmit.className = 'btn btn-success';
+        btnCancelEdit.style.display = 'none';
+    }
+
+    // --- Carregar Produtos ---
+    async function loadProducts() {
+        try {
+            // Busca todos os produtos ordenados por nome
+            const { data, error } = await db
+                .from('produtos')
+                .select('*')
+                .order('nome', { ascending: true });
+
+            if (error) throw error;
+
+            allProducts = data || [];
+            populateCategoryFilter();
+            renderTable();
+
+        } catch (err) {
+            console.error('Erro ao carregar produtos:', err);
+            showMessage('Erro ao carregar produtos: ' + err.message);
+            tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: #e74c3c;">Erro ao carregar. Verifique se a tabela "produtos" existe e se as políticas de RLS permitem leitura.</td></tr>`;
+        }
+    }
+
+    function populateCategoryFilter() {
+        const categorias = [...new Set(allProducts.map(p => p.categoria).filter(c => c))];
+        const currentVal = filterCategoria.value;
+        filterCategoria.innerHTML = '<option value="">Todas as Categorias</option>';
+        categorias.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            filterCategoria.appendChild(option);
+        });
+        if (categorias.includes(currentVal)) filterCategoria.value = currentVal;
+    }
+
+    function renderTable() {
+        const term = searchInput.value.toLowerCase().trim();
+        const catFilter = filterCategoria.value;
+
+        let filtered = allProducts;
+
+        // Filtro de busca
+        if (term) {
+            filtered = filtered.filter(p => 
+                (p.nome && p.nome.toLowerCase().includes(term)) ||
+                (p.marca && p.marca.toLowerCase().includes(term)) ||
+                (p.codigo && p.codigo.toLowerCase().includes(term)) ||
+                (p.modelo && p.modelo.toLowerCase().includes(term))
+            );
+        }
+
+        // Filtro de categoria
+        if (catFilter) {
+            filtered = filtered.filter(p => p.categoria === catFilter);
+        }
+
+        if (filtered.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Nenhum produto encontrado.</td></tr>';
+            return;
+        }
+
+        tableBody.innerHTML = filtered.map(p => {
+            const isLowStock = p.quantidade <= 5; // Limite de alerta
+            const rowClass = isLowStock ? 'low-stock' : '';
+            const badge = isLowStock ? '<span class="low-stock-badge">BAIXO</span>' : '';
+            
+            return `
+                <tr class="${rowClass}">
+                    <td>${p.codigo || '-'}</td>
+                    <td>${p.nome}${badge}</td>
+                    <td>${p.categoria || '-'}</td>
+                    <td>${(p.marca || '') + (p.modelo ? ' / ' + p.modelo : '') || '-'}</td>
+                    <td><strong>${p.quantidade}</strong></td>
+                    <td>R$ ${formatCurrency(p.preco_custo)}</td>
+                    <td>R$ ${formatCurrency(p.preco_venda)}</td>
+                    <td>
+                        <button class="btn btn-warning" onclick="editProduct(${p.id})" title="Editar">✏️</button>
+                        <button class="btn btn-danger" onclick="deleteProduct(${p.id})" title="Excluir">🗑️</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // --- Salvar (Criar ou Atualizar) ---
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const id = productIdInput.value;
+        const produto = {
+            nome: document.getElementById('nome').value.trim(),
+            categoria: document.getElementById('categoria').value.trim() || null,
+            marca: document.getElementById('marca').value.trim() || null,
+            modelo: document.getElementById('modelo').value.trim() || null,
+            codigo: document.getElementById('codigo').value.trim() || null,
+            quantidade: parseInt(document.getElementById('quantidade').value) || 0,
+            preco_custo: parseFloat(document.getElementById('precoCusto').value) || 0,
+            preco_venda: parseFloat(document.getElementById('precoVenda').value) || 0
+        };
+
+        if (!produto.nome) {
+            showMessage('O nome do produto é obrigatório.');
+            return;
+        }
+
+        try {
+            let error;
+            if (id) {
+                // Atualizar
+                const { error: updateError } = await db
+                    .from('produtos')
+                    .update(produto)
+                    .eq('id', id);
+                error = updateError;
+            } else {
+                // Inserir
+                const { error: insertError } = await db
+                    .from('produtos')
+                    .insert([produto]);
+                error = insertError;
+            }
+
+            if (error) throw error;
+
+            showMessage(id ? 'Produto atualizado com sucesso!' : 'Produto cadastrado com sucesso!', 'success');
+            resetForm();
+            loadProducts();
+
+        } catch (err) {
+            console.error('Erro ao salvar:', err);
+            showMessage('Erro ao salvar: ' + err.message);
+        }
+    });
+
+    // --- Editar ---
+    window.editProduct = (id) => {
+        const p = allProducts.find(item => item.id === id);
+        if (!p) return;
+
+        document.getElementById('productId').value = p.id;
+        document.getElementById('nome').value = p.nome || '';
+        document.getElementById('categoria').value = p.categoria || '';
+        document.getElementById('marca').value = p.marca || '';
+        document.getElementById('modelo').value = p.modelo || '';
+        document.getElementById('codigo').value = p.codigo || '';
+        document.getElementById('quantidade').value = p.quantidade || 0;
+        document.getElementById('precoCusto').value = p.preco_custo || 0;
+        document.getElementById('precoVenda').value = p.preco_venda || 0;
+
+        formTitle.textContent = 'Editar Produto';
+        btnSubmit.textContent = 'Atualizar Produto';
+        btnSubmit.className = 'btn btn-primary';
+        btnCancelEdit.style.display = 'inline-block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // --- Excluir ---
+    window.deleteProduct = async (id) => {
+        if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+
+        try {
+            const { error } = await db
+                .from('produtos')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+
+            showMessage('Produto excluído com sucesso!', 'success');
+            loadProducts();
+        } catch (err) {
+            console.error('Erro ao excluir:', err);
+            showMessage('Erro ao excluir: ' + err.message);
+        }
+    };
+
+    // --- Inicialização ---
+    window.addEventListener('DOMContentLoaded', () => {
+        // Verifica se as credenciais foram preenchidas
+        if (SUPABASE_URL.includes('SUA_URL') || SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')) {
+            showMessage('⚠️ Configure SUPABASE_URL e SUPABASE_ANON_KEY no código antes de usar.');
+            tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: #e74c3c;">Aguardando configuração do Supabase.</td></tr>';
+            return;
+        }
+        loadProducts();
+    });
+</script>
+</body>
+</html>
